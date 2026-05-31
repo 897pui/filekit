@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FileKit — 올인원 파일 도구</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+  <style>
+    /* ===== Glassmorphism Theme (default) ===== */
+    :root {
+      --text: #1a1a2e;
+      --text2: #3a3a52;
+      --muted: #6b6b85;
+      --accent: #6d3bff;
+      --accent2: #9a5cff;
+      --accent-ink: #5a2de0;
+      --green: #0d9f6e;
+      --yellow: #c47d00;
+      --red: #e0356b;
+      --blue: #2563eb;
+      --radius: 22px;
+      --radius-sm: 14px;
+      /* glass surfaces */
+      --glass: rgba(255, 255, 255, 0.55);
+      --glass2: rgba(255, 255, 255, 0.40);
+      --glass-strong: rgba(255, 255, 255, 0.75);
+      --glass-border: rgba(255, 255, 255, 0.7);
+      --glass-inner: rgba(255, 255, 255, 0.25);
+      --shadow: 0 8px 32px rgba(80, 40, 160, 0.16);
+      --shadow-sm: 0 4px 16px rgba(80, 40, 160, 0.10);
+      --blur: blur(18px);
+      --accent-soft: rgba(109, 59, 255, 0.12);
+      --green-soft: rgba(13, 159, 110, 0.16);
+      --yellow-soft: rgba(196, 125, 0, 0.16);
+      --red-soft: rgba(224, 53, 107, 0.16);
+      --blue-soft: rgba(37, 99, 235, 0.16);
+      /* aurora blob colors */
+      --blob1: #b18cff;
+      --blob2: #ff8ccf;
+      --blob3: #7ce0ff;
+      --blob4: #8cffd1;
+    }
+    body.dark {
+      --text: #f0f0fa;
+      --text2: #c8c8de;
+      --muted: #9292b0;
+      --accent: #b794ff;
+      --accent2: #c9aaff;
+      --accent-ink: #d4baff;
+      --green: #4ade80;
+      --yellow: #fbbf24;
+      --red: #fb7185;
+      --blue: #7d-a8fa;
+      --blue: #7da8fa;
+      --glass: rgba(30, 28, 54, 0.50);
+      --glass2: rgba(30, 28, 54, 0.35);
+      --glass-strong: rgba(40, 38, 70, 0.70);
+      --glass-border: rgba(255, 255, 255, 0.14);
+      --glass-inner: rgba(255, 255, 255, 0.05);
+      --shadow: 0 8px 36px rgba(0, 0, 0, 0.45);
+      --shadow-sm: 0 4px 18px rgba(0, 0, 0, 0.35);
+      --accent-soft: rgba(183, 148, 255, 0.18);
+      --green-soft: rgba(74, 222, 128, 0.16);
+      --yellow-soft: rgba(251, 191, 36, 0.16);
+      --red-soft: rgba(251, 113, 133, 0.16);
+      --blue-soft: rgba(125, 168, 250, 0.16);
+      --blob1: #5b3da8;
+      --blob2: #a83d7e;
+      --blob3: #2d6ea8;
+      --blob4: #2d8a6e;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      color: var(--text);
+      font-family: 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', -apple-system, sans-serif;
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+      padding: 56px 20px 100px; position: relative;
+      background: linear-gradient(135deg, #f3e9ff 0%, #fde9f4 35%, #e9f5ff 70%, #e9fff5 100%);
+      background-attachment: fixed;
+      transition: color .35s;
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    body.dark { background: linear-gradient(135deg, #14101f 0%, #1a0f1a 40%, #0f1620 75%, #0f1a17 100%); background-attachment: fixed; }
+
+    /* aurora blobs */
+    .aurora { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .65; animation: float 18s ease-in-out infinite; }
+    .blob.b1 { width: 460px; height: 460px; background: var(--blob1); top: -120px; left: -100px; }
+    .blob.b2 { width: 400px; height: 400px; background: var(--blob2); top: 10%; right: -120px; animation-delay: -4s; }
+    .blob.b3 { width: 420px; height: 420px; background: var(--blob3); bottom: -140px; left: 5%; animation-delay: -8s; }
+    .blob.b4 { width: 360px; height: 360px; background: var(--blob4); bottom: 5%; right: 8%; animation-delay: -12s; }
+    @keyframes float {
+      0%,100% { transform: translate(0,0) scale(1); }
+      33% { transform: translate(40px,-30px) scale(1.1); }
+      66% { transform: translate(-30px,30px) scale(.95); }
+    }
+
+    /* ===== Header ===== */
+    .header { text-align: center; margin-bottom: 38px; }
+    .header .logo {
+      width: 74px; height: 74px; margin: 0 auto 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 34px; border-radius: 22px;
+      background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); box-shadow: var(--shadow);
+    }
+    .header h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.7px;
+      background: linear-gradient(120deg, #6d3bff, #e0356b 60%, #2563eb);
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    body.dark .header h1 { background: linear-gradient(120deg, #b794ff, #fb7185 60%, #7da8fa); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .header p { color: var(--text2); font-size: 13.5px; margin-top: 10px; line-height: 1.6; }
+    .wrap { width: 100%; max-width: 600px; }
+
+    /* glass mixin via classes */
+    .theme-toggle {
+      position: fixed; top: 22px; right: 22px; z-index: 50;
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 1px solid var(--glass-border); cursor: pointer; font-size: 18px; color: var(--text);
+      display: flex; align-items: center; justify-content: center; transition: all .18s;
+      background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow-sm);
+    }
+    .theme-toggle:hover { transform: translateY(-2px) scale(1.05); box-shadow: var(--shadow); }
+
+    /* ===== Tabs ===== */
+    .tabs {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 24px;
+      background: var(--glass2); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); border-radius: 18px; padding: 7px; box-shadow: var(--shadow-sm);
+    }
+    .tab-btn {
+      padding: 10px 6px; border-radius: 12px; border: none;
+      background: transparent; color: var(--muted); font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all .18s; white-space: nowrap; letter-spacing: -0.2px;
+    }
+    .tab-btn:hover:not(.active) { color: var(--text); background: var(--glass-inner); }
+    .tab-btn.active { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 4px 14px rgba(109,59,255,0.4); }
+
+    /* ===== Drop zone ===== */
+    .dropzone {
+      border: 1.5px dashed rgba(109,59,255,0.4); border-radius: var(--radius);
+      background: var(--glass2); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      padding: 46px 24px; text-align: center; cursor: pointer; transition: all .2s;
+      margin-bottom: 18px; position: relative; box-shadow: var(--shadow-sm);
+    }
+    .dropzone:hover { border-color: var(--accent); background: var(--glass); }
+    .dropzone.drag { border-color: var(--accent); background: var(--glass); transform: scale(1.005); box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow); }
+    .dropzone.drag .dz-icon { transform: scale(1.12) translateY(-3px); }
+    .dropzone .dz-icon {
+      width: 60px; height: 60px; margin: 0 auto 16px; font-size: 26px;
+      display: flex; align-items: center; justify-content: center; border-radius: 18px; transition: transform .2s;
+      background: var(--glass-strong); border: 1px solid var(--glass-border); box-shadow: var(--shadow-sm);
+    }
+    .dropzone h3 { font-size: 15px; font-weight: 700; margin-bottom: 7px; letter-spacing: -0.3px; }
+    .dropzone p { font-size: 12.5px; color: var(--text2); line-height: 1.5; }
+    .type-chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+    .type-chip {
+      font-size: 11px; font-weight: 600; padding: 6px 13px; border-radius: 99px;
+      background: var(--glass-strong); color: var(--text2); border: 1px solid var(--glass-border);
+    }
+    .dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+    /* ===== Options bar ===== */
+    .options-bar {
+      background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius);
+      padding: 18px 20px; margin-bottom: 16px; display: none; align-items: center; gap: 14px; flex-wrap: wrap;
+      box-shadow: var(--shadow-sm);
+    }
+    .options-bar.show { display: flex; }
+    .opt-label { font-size: 13px; font-weight: 600; color: var(--text2); white-space: nowrap; }
+    .quality-slider { flex: 1; min-width: 110px; }
+    input[type="range"] {
+      width: 100%; -webkit-appearance: none; height: 6px; border-radius: 99px; cursor: pointer;
+      background: rgba(109,59,255,0.18);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2)); cursor: pointer;
+      border: 2px solid rgba(255,255,255,0.8); box-shadow: 0 2px 8px rgba(109,59,255,0.4);
+    }
+    .quality-val { font-size: 13px; font-weight: 800; color: var(--accent-ink); min-width: 40px; text-align: center; }
+    select, input[type="text"], input[type="number"] {
+      background: var(--glass-strong); color: var(--text); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; font-weight: 500;
+      font-family: inherit; transition: all .15s; backdrop-filter: var(--blur);
+    }
+    select { cursor: pointer; font-weight: 600; }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+    /* ===== Overall progress ===== */
+    .overall-progress {
+      background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius);
+      padding: 18px 20px; margin-bottom: 16px; display: none; box-shadow: var(--shadow-sm);
+    }
+    .overall-progress.show { display: block; }
+    .op-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+    .op-label span:last-child { color: var(--muted); }
+    .op-track { height: 9px; background: rgba(109,59,255,0.14); border-radius: 99px; overflow: hidden; }
+    .op-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; transition: width .3s ease; width: 0%; }
+
+    /* ===== Group ===== */
+    .group {
+      background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius);
+      margin-bottom: 14px; overflow: hidden; box-shadow: var(--shadow); animation: slideIn .25s ease;
+    }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .group-head {
+      display: flex; align-items: center; gap: 13px; padding: 15px 18px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .group-icon {
+      width: 42px; height: 42px; flex-shrink: 0; font-size: 19px;
+      display: flex; align-items: center; justify-content: center; border-radius: 13px;
+      background: var(--glass-strong); border: 1px solid var(--glass-border);
+    }
+    .group-meta { flex: 1; min-width: 0; }
+    .group-name { font-size: 14.5px; font-weight: 700; letter-spacing: -0.3px; display: flex; align-items: center; }
+    .group-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .group-name .auto-tag {
+      font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2));
+      padding: 3px 8px; border-radius: 99px; margin-left: 8px;
+    }
+    .btn-group-zip {
+      font-size: 12px; font-weight: 700; padding: 9px 14px; border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border); color: var(--text2); background: var(--glass-strong);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .btn-group-zip:hover:not(:disabled) { color: var(--accent-ink); border-color: var(--accent); }
+    .btn-group-zip:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ===== File row ===== */
+    .file-row {
+      display: grid; grid-template-columns: auto 1fr auto; gap: 13px; align-items: center;
+      padding: 13px 18px; border-bottom: 1px solid var(--glass-border); transition: background .12s;
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-row:hover { background: var(--glass-inner); }
+    .file-icon { font-size: 20px; width: 24px; text-align: center; }
+    .file-info { overflow: hidden; }
+    .file-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; letter-spacing: -0.2px; }
+    .file-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .file-type-badge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 8px; letter-spacing: 0.3px; }
+    .badge-image { background: var(--green-soft); color: var(--green); }
+    .badge-pdf { background: var(--red-soft); color: var(--red); }
+    .badge-docx { background: var(--blue-soft); color: var(--blue); }
+    .badge-zip { background: var(--yellow-soft); color: var(--yellow); }
+    .badge-other { background: var(--accent-soft); color: var(--muted); }
+    .file-size { font-size: 12px; color: var(--muted); }
+    .file-saving { font-size: 12px; font-weight: 700; color: var(--green); }
+    .file-status-text { font-size: 12px; color: var(--accent-ink); font-weight: 600; }
+    .progress-bar { height: 4px; background: rgba(109,59,255,0.14); border-radius: 99px; margin-top: 8px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; transition: width .3s ease; width: 0%; }
+    .file-actions { display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; opacity: .4; }
+    .status-dot.processing { background: var(--yellow); opacity: 1; animation: pulse 1s infinite; }
+    .status-dot.done { background: var(--green); opacity: 1; }
+    .status-dot.error { background: var(--red); opacity: 1; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .btn-download {
+      font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 10px;
+      border: none; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2));
+      cursor: pointer; transition: all .15s; white-space: nowrap; box-shadow: 0 2px 10px rgba(109,59,255,0.35);
+    }
+    .btn-download:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(109,59,255,0.5); }
+    .btn-copy {
+      font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 10px;
+      border: 1px solid var(--green); color: var(--green); background: var(--glass-strong);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .btn-copy:hover { background: var(--green); color: #fff; }
+    .btn-txt {
+      font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 10px;
+      border: 1px solid var(--blue); color: var(--blue); background: var(--glass-strong);
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .btn-txt:hover { background: var(--blue); color: #fff; }
+    .btn-remove { font-size: 13px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: all .15s; }
+    .btn-remove:hover { color: var(--red); background: var(--red-soft); }
+
+    .text-result {
+      grid-column: 1 / -1; margin-top: 8px; background: var(--glass-strong); border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm); padding: 14px 16px; font-size: 12.5px; line-height: 1.7;
+      max-height: 220px; overflow-y: auto; white-space: pre-wrap; color: var(--text2);
+      font-family: 'SF Mono', 'D2Coding', Menlo, monospace;
+    }
+    .text-result:empty { display: none; }
+
+    /* ===== Check report ===== */
+    .check-list { grid-column: 1 / -1; margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .check-item {
+      display: flex; align-items: center; gap: 11px; font-size: 13px;
+      padding: 11px 14px; border-radius: var(--radius-sm); border: 1px solid var(--glass-border);
+    }
+    .check-item.pass { background: var(--green-soft); }
+    .check-item.warn { background: var(--yellow-soft); }
+    .check-item.fail { background: var(--red-soft); }
+    .check-ic { font-size: 14px; flex-shrink: 0; }
+    .check-txt { flex: 1; }
+    .check-txt b { font-weight: 700; }
+    .check-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .dup-block { grid-column: 1/-1; margin-top: 8px; background: var(--yellow-soft); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .dup-title { font-size: 12px; font-weight: 700; color: var(--yellow); margin-bottom: 6px; }
+    .dup-file { font-size: 12px; color: var(--muted); padding: 2px 0; }
+
+    /* ===== Summary ===== */
+    .summary {
+      background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius);
+      padding: 22px; display: none; margin: 18px 0 16px; box-shadow: var(--shadow);
+    }
+    .summary.show { display: block; }
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .summary-stat { text-align: center; padding: 14px 8px; border-radius: var(--radius-sm); background: var(--glass-inner); }
+    .summary-val { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .summary-key { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+    /* ===== Buttons ===== */
+    .btn-main { width: 100%; padding: 16px; border-radius: var(--radius-sm); border: none; font-size: 15px; font-weight: 700; cursor: pointer; transition: all .18s; letter-spacing: -0.3px; }
+    .btn-action { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; margin-bottom: 12px; box-shadow: 0 6px 22px rgba(109,59,255,0.4); }
+    .btn-action:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(109,59,255,0.55); }
+    .btn-action:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+    .btn-zip-all { background: var(--glass-strong); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); color: var(--text2); }
+    .btn-zip-all:hover:not(:disabled) { color: var(--accent-ink); border-color: var(--accent); }
+    .btn-zip-all:disabled { opacity: .45; cursor: not-allowed; }
+
+    .empty-state { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; display: none; }
+    .empty-state.show { display: block; }
+    .toast {
+      position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--glass-strong); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); color: var(--text);
+      padding: 14px 24px; border-radius: 14px; font-size: 13px; font-weight: 600;
+      opacity: 0; transition: all .25s; pointer-events: none; z-index: 100; box-shadow: var(--shadow);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ===== Pack form ===== */
+    .pack-form { background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+      border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; display: none; box-shadow: var(--shadow-sm); }
+    .pack-form.show { display: block; }
+    .pack-row { display: flex; gap: 12px; margin-bottom: 14px; }
+    .pack-row:last-child { margin-bottom: 0; }
+    .pack-field { flex: 1; }
+    .pack-field label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 7px; }
+    .pack-field input { width: 100%; }
+    .pack-preview { font-size: 13px; color: var(--accent-ink); font-weight: 700; margin-top: 4px; padding: 12px 14px; background: var(--accent-soft); border-radius: var(--radius-sm); }
+  </style>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="다크/라이트 모드">☀️</button>
+
+<div class="header">
+  <span class="logo">🧰</span>
+  <h1>FileKit</h1>
+  <p>압축 · 변환 · 글자추출 · PDF합치기 · 제출검사 · 압축팩 · 중복탐지<br>과제 제출 전 필요한 모든 파일 작업을 한 곳에서</p>
+</div>
+
+<div class="wrap">
+
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="compress" onclick="switchTab('compress')">🗜️ 압축</button>
+    <button class="tab-btn" data-tab="convert" onclick="switchTab('convert')">🔄 변환</button>
+    <button class="tab-btn" data-tab="extract" onclick="switchTab('extract')">📋 글자추출</button>
+    <button class="tab-btn" data-tab="merge" onclick="switchTab('merge')">🔗 PDF합치기</button>
+    <button class="tab-btn" data-tab="inspect" onclick="switchTab('inspect')">📑 제출검사</button>
+    <button class="tab-btn" data-tab="pack" onclick="switchTab('pack')">📦 압축팩</button>
+    <button class="tab-btn" data-tab="dup" onclick="switchTab('dup')">🔍 중복탐지</button>
+    <button class="tab-btn" data-tab="heic" onclick="switchTab('heic')">🍎 HEIC변환</button>
+  </div>
+
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" multiple />
+    <span class="dz-icon">📂</span>
+    <h3 id="dzTitle">파일을 끌어다 놓거나 클릭하여 선택</h3>
+    <p id="dzDesc"></p>
+    <div class="type-chips" id="dzChips"></div>
+  </div>
+
+  <div class="options-bar" id="compressOptions">
+    <span class="opt-label">🎚️ 압축 품질</span>
+    <div class="quality-slider">
+      <input type="range" id="qualitySlider" min="10" max="95" value="65"
+        oninput="document.getElementById('qualityVal').textContent = this.value + '%'" />
+    </div>
+    <span class="quality-val" id="qualityVal">65%</span>
+  </div>
+
+  <div class="options-bar" id="convertOptions">
+    <span class="opt-label">🔄 변환 형식</span>
+    <select id="convertTarget">
+      <option value="image/jpeg">→ JPG</option>
+      <option value="image/png">→ PNG</option>
+      <option value="image/webp">→ WebP</option>
+      <option value="application/pdf">→ PDF (이미지를 PDF로)</option>
+      <option value="pdf2img">PDF → PNG 이미지</option>
+    </select>
+  </div>
+
+  <div class="options-bar" id="inspectOptions">
+    <span class="opt-label">📏 용량 제한</span>
+    <input type="number" id="sizeLimit" value="10" min="1" style="width:80px" /> <span class="opt-label">MB</span>
+    <span class="opt-label" style="margin-left:8px">📄 최소 페이지</span>
+    <input type="number" id="minPages" value="1" min="0" style="width:70px" />
+    <span class="opt-label" style="margin-left:8px">📄 최대 페이지</span>
+    <input type="number" id="maxPages" value="0" min="0" style="width:70px" placeholder="0=무제한" />
+  </div>
+
+  <div class="pack-form" id="packForm">
+    <div class="pack-row">
+      <div class="pack-field"><label>학번</label><input type="text" id="packId" placeholder="20251234" oninput="updatePackPreview()" /></div>
+      <div class="pack-field"><label>이름</label><input type="text" id="packName" placeholder="홍길동" oninput="updatePackPreview()" /></div>
+      <div class="pack-field"><label>과제명</label><input type="text" id="packTitle" placeholder="과제2" oninput="updatePackPreview()" /></div>
+    </div>
+    <div class="pack-preview" id="packPreview">📦 생성될 파일명: 20251234_홍길동_과제2.zip</div>
+  </div>
+
+  <div class="overall-progress" id="overallProgress">
+    <div class="op-label"><span id="opText">처리 중...</span><span id="opCount">0 / 0</span></div>
+    <div class="op-track"><div class="op-fill" id="opFill"></div></div>
+  </div>
+
+  <div id="groupContainer"></div>
+  <div class="empty-state" id="emptyState">파일을 추가하면 여기에 표시됩니다</div>
+
+  <div class="summary" id="summary">
+    <div class="summary-grid">
+      <div class="summary-stat"><div class="summary-val" id="sumOriginal">—</div><div class="summary-key">원본 용량</div></div>
+      <div class="summary-stat"><div class="summary-val" id="sumCompressed" style="color:var(--green)">—</div><div class="summary-key">처리 후 용량</div></div>
+      <div class="summary-stat"><div class="summary-val" id="sumSaved" style="color:var(--accent)">—</div><div class="summary-key">절약된 용량</div></div>
+    </div>
+  </div>
+
+  <button class="btn-main btn-action" id="btnAction" disabled onclick="runAction()">실행</button>
+  <button class="btn-main btn-zip-all" id="btnZipAll" disabled onclick="downloadAllGroupsZip()">📦 결과를 그룹별로 묶어 ZIP 다운로드</button>
+  <button class="btn-main btn-zip-all" id="btnTxtAll" style="display:none" disabled onclick="downloadAllTxt()">📄 추출한 글자 전체를 .txt로 다운로드</button>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let currentTab = 'compress';
+  const files = [];
+  let idCounter = 0;
+  let mergedResult = null;
+
+  const TAB_CONFIG = {
+    compress: { accept: 'image/*,.pdf,.docx,.zip,.xlsx,.pptx',
+      desc: '예) "스크린샷 2024-11-22", "스크린샷 2024-12-23" → 자동으로 같은 그룹으로 묶임',
+      chips: ['🖼️ 이미지 압축','📄 PDF 압축','📝 DOCX 내부 이미지 압축','🏷️ 이름별 자동 그룹핑'], btn: '🗜️ 전체 압축 시작' },
+    convert: { accept: 'image/*,.pdf',
+      desc: '이미지를 JPG·PNG·WebP·PDF로, 또는 PDF를 PNG 이미지로 변환합니다',
+      chips: ['🖼️ 이미지 → JPG/PNG/WebP','🖼️ 이미지 → PDF','📄 PDF → PNG'], btn: '🔄 변환 시작' },
+    extract: { accept: 'image/*,.pdf,.docx',
+      desc: '이미지는 OCR(한국어+영어)로, PDF·DOCX는 본문에서 글자를 추출합니다',
+      chips: ['🖼️ 이미지 OCR','📄 PDF 텍스트','📝 DOCX 텍스트','📋 복사 · txt 저장'], btn: '📋 글자 추출 시작' },
+    merge: { accept: '.pdf',
+      desc: 'PDF 여러 개를 올린 순서대로 하나의 PDF로 합칩니다',
+      chips: ['🔗 여러 PDF → 하나로','📄 업로드 순서 유지'], btn: '🔗 PDF 합치기' },
+    inspect: { accept: '.pdf',
+      desc: '제출 전 PDF를 자동 점검합니다 (용량·페이지·빈 페이지·가로 페이지)',
+      chips: ['📏 용량 제한','📄 페이지 수','⬜ 빈 페이지','📐 가로 페이지'], btn: '📑 제출 규격 검사' },
+    pack: { accept: '*',
+      desc: '학번·이름·과제명을 입력하면 제출 규격에 맞는 ZIP 파일로 묶어줍니다',
+      chips: ['📦 학번_이름_과제.zip','🗂️ 한번에 정리'], btn: '📦 제출용 압축팩 생성' },
+    dup: { accept: '*',
+      desc: '이름이 비슷하거나 내용이 완전히 같은 중복 파일을 찾아냅니다',
+      chips: ['🔍 유사 이름 탐지','🧬 동일 내용 탐지(해시)','🗑️ 삭제 후보 추천'], btn: '🔍 중복 파일 탐지' },
+    heic: { accept: '.heic,.heif,image/heic,image/heif',
+      desc: '아이폰·맥 사진(HEIC/HEIF)을 어디서나 열 수 있는 JPG로 변환합니다',
+      chips: ['🍎 HEIC → JPG','📱 아이폰 사진 호환'], btn: '🍎 JPG로 변환' }
+  };
+
+  function toggleTheme() {
+    document.body.classList.toggle('dark');
+    const isDark = document.body.classList.contains('dark');
+    document.getElementById('themeToggle').textContent = isDark ? '🌙' : '☀️';
+    localStorage.setItem('filekit-theme', isDark ? 'dark' : 'light');
+  }
+  if (localStorage.getItem('filekit-theme') === 'dark') {
+    document.body.classList.add('dark');
+    document.getElementById('themeToggle').textContent = '🌙';
+  }
+
+  function hideAllOptions() {
+    ['compressOptions','convertOptions','inspectOptions'].forEach(id => document.getElementById(id).classList.remove('show'));
+    document.getElementById('packForm').classList.remove('show');
+  }
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    const cfg = TAB_CONFIG[tab];
+    document.getElementById('fileInput').setAttribute('accept', cfg.accept);
+    document.getElementById('dzDesc').textContent = cfg.desc;
+    document.getElementById('dzChips').innerHTML = cfg.chips.map(c => `<span class="type-chip">${c}</span>`).join('');
+    document.getElementById('btnAction').textContent = cfg.btn;
+    files.forEach(f => { f.status='pending'; f.resultBlob=null; f.resultName=null; f.extractedText=null; f.checks=null; f.dupGroup=null; });
+    mergedResult = null;
+    hideAllOptions();
+    if (files.length > 0) {
+      if (tab === 'compress') document.getElementById('compressOptions').classList.add('show');
+      if (tab === 'convert') document.getElementById('convertOptions').classList.add('show');
+      if (tab === 'inspect') document.getElementById('inspectOptions').classList.add('show');
+    }
+    if (tab === 'pack') document.getElementById('packForm').classList.add('show');
+    document.getElementById('btnAction').disabled = files.length === 0;
+    document.getElementById('btnZipAll').style.display = (tab==='compress'||tab==='convert'||tab==='heic') ? 'block' : 'none';
+    document.getElementById('btnZipAll').disabled = true;
+    document.getElementById('btnTxtAll').style.display = (tab==='extract') ? 'block' : 'none';
+    document.getElementById('btnTxtAll').disabled = true;
+    document.getElementById('overallProgress').classList.remove('show');
+    render(); updateSummary();
+  }
+
+  function detectType(file) {
+    const n = file.name.toLowerCase();
+    if (/\.(heic|heif)$/.test(n)) return 'heic';
+    if (/\.(jpg|jpeg|png|webp|gif|bmp)$/.test(n)) return 'image';
+    if (/\.pdf$/.test(n)) return 'pdf';
+    if (/\.(docx|xlsx|pptx|ppt)$/.test(n)) return 'docx';
+    if (/\.zip$/.test(n)) return 'zip';
+    return 'other';
+  }
+  const typeIcon = t => ({ image:'🖼️', heic:'🍎', pdf:'📄', docx:'📝', zip:'🗂️', other:'📁' }[t] || '📁');
+  const typeLabel = t => ({ image:'이미지', heic:'HEIC', pdf:'PDF', docx:'문서', zip:'ZIP', other:'기타' }[t] || '기타');
+
+  function extractGroup(filename) {
+    let base = filename.replace(/\.[^.]+$/, '');
+    let tokens = base.split(/[\s_\-.]+/).filter(Boolean);
+    while (tokens.length > 1 && /\d/.test(tokens[tokens.length - 1])) tokens.pop();
+    let name = tokens.join(' ').trim();
+    if (!name || /^\d+$/.test(name)) name = base;
+    return name;
+  }
+  function groupIcon(group) {
+    const types = new Set(group.items.map(i => i.type));
+    return types.size === 1 ? typeIcon([...types][0]) : '🗃️';
+  }
+  function fmtSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(2) + ' MB';
+  }
+
+  function addFiles(fileList) {
+    for (const f of fileList) {
+      files.push({ file: f, id: idCounter++, type: detectType(f), group: extractGroup(f.name),
+        status: 'pending', originalSize: f.size, resultBlob: null, resultName: null, extractedText: null, checks: null, dupGroup: null });
+    }
+    render();
+    hideAllOptions();
+    if (currentTab === 'compress') document.getElementById('compressOptions').classList.add('show');
+    if (currentTab === 'convert') document.getElementById('convertOptions').classList.add('show');
+    if (currentTab === 'inspect') document.getElementById('inspectOptions').classList.add('show');
+    if (currentTab === 'pack') document.getElementById('packForm').classList.add('show');
+    document.getElementById('btnAction').disabled = files.length === 0;
+  }
+
+  function getGroups() {
+    if (currentTab === 'merge') return files.length ? [{ name:'합칠 PDF (순서대로)', items: files }] : [];
+    if (currentTab === 'pack') return files.length ? [{ name:'압축팩에 담을 파일', items: files }] : [];
+    if (currentTab === 'inspect') return files.length ? [{ name:'제출 검사 대상', items: files }] : [];
+    if (currentTab === 'dup') return files.length ? [{ name:'중복 탐지 대상', items: files }] : [];
+    if (currentTab === 'heic') return files.length ? [{ name:'HEIC 변환 대상', items: files }] : [];
+    const map = new Map();
+    for (const item of files) {
+      if (!map.has(item.group)) map.set(item.group, { name: item.group, items: [] });
+      map.get(item.group).items.push(item);
+    }
+    return [...map.values()];
+  }
+
+  function render() {
+    const container = document.getElementById('groupContainer');
+    const empty = document.getElementById('emptyState');
+    const groups = getGroups();
+    if (!groups.length) { container.innerHTML = ''; empty.classList.add('show'); return; }
+    empty.classList.remove('show');
+    const grouped = (currentTab === 'compress');
+    container.innerHTML = groups.map(g => {
+      const totalSize = g.items.reduce((s, i) => s + i.originalSize, 0);
+      const allDone = g.items.every(i => i.resultBlob);
+      const showZip = currentTab==='compress' || currentTab==='convert' || currentTab==='heic';
+      const tag = grouped ? '<span class="auto-tag">자동 분류</span>' : '';
+      let headBtn = '';
+      if (showZip) headBtn = `<button class="btn-group-zip" ${allDone?'':'disabled'} onclick="downloadGroupZip('${escapeAttr(g.name)}')">📦 그룹 ZIP</button>`;
+      if (currentTab==='merge' && mergedResult) headBtn = `<button class="btn-download" onclick="downloadMerged()">⬇ 합친 PDF</button>`;
+      if (currentTab==='pack' && mergedResult) headBtn = `<button class="btn-download" onclick="downloadMerged()">⬇ 압축팩</button>`;
+      const headIcon = currentTab==='merge'?'🔗':currentTab==='pack'?'📦':currentTab==='inspect'?'📑':currentTab==='dup'?'🔍':currentTab==='heic'?'🍎':groupIcon(g);
+      return `
+        <div class="group">
+          <div class="group-head">
+            <div class="group-icon">${headIcon}</div>
+            <div class="group-meta">
+              <div class="group-name">${escapeHtml(g.name)}${tag}</div>
+              <div class="group-sub">${g.items.length}개 파일 · ${fmtSize(totalSize)}</div>
+            </div>
+            ${headBtn}
+          </div>
+          ${g.items.map((it, idx) => fileRowHTML(it, idx, g.items.length)).join('')}
+        </div>`;
+    }).join('');
+  }
+
+  function fileRowHTML(item, idx, total) {
+    let metaRight = `<span class="file-size">${fmtSize(item.originalSize)}</span>`, actionBtns = '', extra = '';
+
+    if (currentTab === 'extract') {
+      if (item.extractedText != null) {
+        metaRight = `<span class="file-saving">✓ ${item.extractedText.length}자 추출</span>`;
+        actionBtns = `<button class="btn-copy" onclick="copyText(${item.id})">📋</button><button class="btn-txt" onclick="downloadTxt(${item.id})">txt</button>`;
+        extra = `<div class="text-result">${escapeHtml(item.extractedText || '(추출된 텍스트 없음)')}</div>`;
+      }
+    } else if (currentTab === 'merge') {
+      metaRight = `<span class="file-size">${idx + 1}번째 · ${fmtSize(item.originalSize)}</span>`;
+      actionBtns = `${idx>0?`<button class="btn-remove" onclick="moveFile(${item.id},-1)">▲</button>`:''}${idx<total-1?`<button class="btn-remove" onclick="moveFile(${item.id},1)">▼</button>`:''}`;
+    } else if (currentTab === 'inspect') {
+      if (item.checks && Array.isArray(item.checks)) {
+        const fails = item.checks.filter(c=>c.level==='fail').length;
+        const warns = item.checks.filter(c=>c.level==='warn').length;
+        metaRight = fails ? `<span class="file-saving" style="color:var(--red)">❌ ${fails}개 문제</span>`
+          : warns ? `<span class="file-saving" style="color:var(--yellow)">⚠️ ${warns}개 경고</span>`
+          : `<span class="file-saving">✅ 통과</span>`;
+        extra = `<div class="check-list">${item.checks.map(c=>`
+          <div class="check-item ${c.level}">
+            <div class="check-ic">${c.level==='pass'?'✅':c.level==='warn'?'⚠️':'❌'}</div>
+            <div class="check-txt"><b>${c.title}</b><div class="check-detail">${c.detail}</div></div>
+          </div>`).join('')}</div>`;
+      }
+    } else if (currentTab === 'dup') {
+      if (item.dupGroup) metaRight = `<span class="file-saving" style="color:var(--yellow)">🔁 중복 그룹 ${item.dupGroup}</span>`;
+      else if (item.checks === 'unique') metaRight = `<span class="file-saving">✓ 고유 파일</span>`;
+    } else {
+      if (item.resultBlob) {
+        metaRight = `<span class="file-saving">${currentTab==='compress' ? '↓ '+Math.max(0,Math.round((1-item.resultBlob.size/item.originalSize)*100))+'% · ' : ''}${fmtSize(item.resultBlob.size)}</span>`;
+        actionBtns = `<button class="btn-download" onclick="downloadOne(${item.id})">⬇</button>`;
+      }
+    }
+
+    const dot = item.status==='pending'?'<div class="status-dot"></div>'
+      : item.status==='processing'?'<div class="status-dot processing"></div>'
+      : item.status==='done'?'<div class="status-dot done"></div>':'<div class="status-dot error"></div>';
+    const statusText = item.statusText ? `<span class="file-status-text"> · ${item.statusText}</span>` : '';
+    return `
+      <div class="file-row">
+        <div class="file-icon">${typeIcon(item.type)}</div>
+        <div class="file-info">
+          <div class="file-name" title="${escapeAttr(item.file.name)}">${escapeHtml(item.file.name)}</div>
+          <div class="file-meta"><span class="file-type-badge badge-${item.type==='heic'?'image':item.type}">${typeLabel(item.type)}</span>${metaRight}${statusText}</div>
+          <div class="progress-bar"><div class="progress-fill" id="prog-${item.id}"></div></div>
+          ${extra}
+        </div>
+        <div class="file-actions">${dot}${actionBtns}<button class="btn-remove" onclick="removeFile(${item.id})">✕</button></div>
+      </div>`;
+  }
+
+  const escapeHtml = s => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const escapeAttr = s => (s||'').replace(/['"\\]/g, '\\$&');
+
+  function moveFile(id, dir) {
+    const i = files.findIndex(f => f.id === id), j = i + dir;
+    if (i===-1 || j<0 || j>=files.length) return;
+    [files[i], files[j]] = [files[j], files[i]]; render();
+  }
+  function removeFile(id) {
+    const i = files.findIndex(f => f.id === id);
+    if (i !== -1) files.splice(i, 1);
+    render();
+    document.getElementById('btnAction').disabled = files.length === 0;
+    document.getElementById('btnZipAll').disabled = !files.some(f => f.resultBlob);
+    document.getElementById('btnTxtAll').disabled = !files.some(f => f.extractedText != null);
+    if (files.length === 0) hideAllOptions();
+    updateSummary();
+  }
+
+  function updatePackPreview() {
+    const id = document.getElementById('packId').value || '학번';
+    const nm = document.getElementById('packName').value || '이름';
+    const ti = document.getElementById('packTitle').value || '과제';
+    document.getElementById('packPreview').textContent = `📦 생성될 파일명: ${id}_${nm}_${ti}.zip`;
+  }
+
+  // ════ MAIN ════
+  async function runAction() {
+    const btn = document.getElementById('btnAction');
+    btn.disabled = true; btn.textContent = '⏳ 처리 중...';
+
+    if (currentTab === 'merge') { await doMerge(); btn.textContent='✅ 합치기 완료'; return; }
+    if (currentTab === 'pack') { await doPack(); btn.textContent='✅ 압축팩 생성 완료'; btn.disabled=false; return; }
+    if (currentTab === 'dup') { await doDupDetect(); btn.textContent='✅ 탐지 완료'; btn.disabled=false; return; }
+
+    const op = document.getElementById('overallProgress'); op.classList.add('show');
+    document.getElementById('opText').textContent =
+      currentTab==='extract'?'글자 추출 중...':currentTab==='convert'?'변환 중...':
+      currentTab==='inspect'?'검사 중...':currentTab==='heic'?'HEIC 변환 중...':'압축 중...';
+    let done = 0;
+    for (const item of files) {
+      item.status = 'processing'; item.statusText = ''; render(); setProgress(item.id, 25);
+      try {
+        if (currentTab==='compress') await doCompress(item);
+        else if (currentTab==='convert') await doConvert(item);
+        else if (currentTab==='extract') await doExtract(item);
+        else if (currentTab==='inspect') await doInspect(item);
+        else if (currentTab==='heic') await doHeic(item);
+        item.status = 'done'; setProgress(item.id, 100);
+      } catch (e) { item.status='error'; item.statusText='실패'; console.error(e); }
+      item.statusText = ''; done++;
+      document.getElementById('opCount').textContent = `${done} / ${files.length}`;
+      document.getElementById('opFill').style.width = (done/files.length*100) + '%';
+      render();
+    }
+    document.getElementById('opText').textContent = '완료!';
+    setTimeout(() => op.classList.remove('show'), 1200);
+    btn.textContent = '✅ 완료';
+    if (currentTab==='compress'||currentTab==='convert'||currentTab==='heic') document.getElementById('btnZipAll').disabled = false;
+    if (currentTab==='extract') document.getElementById('btnTxtAll').disabled = !files.some(f => f.extractedText != null);
+    updateSummary();
+  }
+  function setProgress(id, pct) { const el = document.getElementById('prog-'+id); if (el) el.style.width = pct+'%'; }
+
+  // ── COMPRESS
+  async function doCompress(item) {
+    const quality = parseInt(document.getElementById('qualitySlider').value)/100;
+    if (item.type==='image') {
+      item.resultBlob = await compressImage(item.file, quality, 'image/jpeg', true);
+      item.resultName = item.file.name.replace(/\.[^.]+$/, '') + '_compressed.jpg';
+    } else if (item.type==='pdf') { item.resultBlob = await compressPdf(item.file); item.resultName = addSuffix(item.file.name,'_compressed'); }
+    else if (item.type==='docx') { item.resultBlob = await compressDocx(item.file, quality); item.resultName = addSuffix(item.file.name,'_compressed'); }
+    else { item.resultBlob = item.file; item.resultName = addSuffix(item.file.name,'_compressed'); }
+  }
+  // ── CONVERT
+  async function doConvert(item) {
+    const target = document.getElementById('convertTarget').value;
+    const base = item.file.name.replace(/\.[^.]+$/, '');
+    if (target==='pdf2img') {
+      if (item.type!=='pdf') { item.resultBlob=item.file; item.resultName=item.file.name; return; }
+      item.resultBlob = await pdfToImagesZip(item.file); item.resultName = base + '_pages.zip';
+    } else if (target==='application/pdf') {
+      if (item.type!=='image') { item.resultBlob=item.file; item.resultName=item.file.name; return; }
+      item.resultBlob = await imageToPdf(item.file); item.resultName = base + '.pdf';
+    } else {
+      if (item.type!=='image') { item.resultBlob=item.file; item.resultName=item.file.name; return; }
+      const ext = {'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[target];
+      item.resultBlob = await compressImage(item.file, 0.92, target, target==='image/jpeg'); item.resultName = base + '.' + ext;
+    }
+  }
+  // ── EXTRACT
+  async function doExtract(item) {
+    if (item.type==='image') {
+      item.statusText='OCR 인식 중...'; render();
+      const { data } = await Tesseract.recognize(item.file, 'kor+eng', {
+        logger: m => { if (m.status==='recognizing text') { item.statusText='OCR '+Math.round(m.progress*100)+'%'; setProgress(item.id,25+m.progress*70); render(); } }
+      });
+      item.extractedText = data.text.trim();
+    } else if (item.type==='pdf') item.extractedText = await extractPdfText(item.file);
+    else if (item.type==='docx') item.extractedText = await extractDocxText(item.file);
+    else item.extractedText = '(지원하지 않는 형식)';
+  }
+  // ── INSPECT
+  async function doInspect(item) {
+    if (item.type !== 'pdf') { item.checks = [{level:'fail', title:'PDF 파일이 아님', detail:'제출 검사는 PDF만 지원합니다'}]; return; }
+    const checks = [];
+    const sizeLimit = parseFloat(document.getElementById('sizeLimit').value) || 10;
+    const minPages = parseInt(document.getElementById('minPages').value) || 0;
+    const maxPages = parseInt(document.getElementById('maxPages').value) || 0;
+
+    const sizeMB = item.originalSize/1048576;
+    if (sizeMB > sizeLimit) checks.push({level:'fail', title:'용량 초과', detail:`${sizeMB.toFixed(1)}MB / 제한 ${sizeLimit}MB`});
+    else checks.push({level:'pass', title:'용량 적합', detail:`${sizeMB.toFixed(1)}MB / 제한 ${sizeLimit}MB`});
+
+    const buf = await item.file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const n = pdf.numPages;
+
+    if (minPages && n < minPages) checks.push({level:'fail', title:'페이지 부족', detail:`${n}페이지 / 최소 ${minPages}페이지`});
+    else if (maxPages && n > maxPages) checks.push({level:'fail', title:'페이지 초과', detail:`${n}페이지 / 최대 ${maxPages}페이지`});
+    else checks.push({level:'pass', title:'페이지 수 적합', detail:`총 ${n}페이지`});
+
+    let emptyPages = [], landscapePages = [];
+    for (let p=1; p<=n; p++) {
+      const page = await pdf.getPage(p);
+      const vp = page.getViewport({ scale: 1 });
+      if (vp.width > vp.height * 1.1) landscapePages.push(p);
+      const content = await page.getTextContent();
+      const txtLen = content.items.map(i=>i.str).join('').trim().length;
+      if (txtLen < 3) emptyPages.push(p);
+      item.statusText = `페이지 검사 ${p}/${n}`; setProgress(item.id, 25 + p/n*70); render();
+    }
+    if (emptyPages.length) checks.push({level:'warn', title:'빈 페이지 의심', detail:`${emptyPages.join(', ')}페이지에 텍스트가 거의 없음 (이미지만 있으면 정상)`});
+    else checks.push({level:'pass', title:'빈 페이지 없음', detail:'모든 페이지에 내용 있음'});
+    if (landscapePages.length) checks.push({level:'warn', title:'가로 페이지 발견', detail:`${landscapePages.join(', ')}페이지가 가로 방향`});
+    else checks.push({level:'pass', title:'페이지 방향 일관', detail:'모두 세로 방향'});
+
+    item.checks = checks;
+  }
+  // ── HEIC
+  async function doHeic(item) {
+    if (item.type !== 'heic') { item.resultBlob = item.file; item.resultName = item.file.name; return; }
+    const out = await heic2any({ blob: item.file, toType: 'image/jpeg', quality: 0.9 });
+    item.resultBlob = Array.isArray(out) ? out[0] : out;
+    item.resultName = item.file.name.replace(/\.(heic|heif)$/i, '') + '.jpg';
+  }
+  // ── MERGE
+  async function doMerge() {
+    const op = document.getElementById('overallProgress'); op.classList.add('show');
+    document.getElementById('opText').textContent = 'PDF 합치는 중...';
+    const merged = await PDFLib.PDFDocument.create();
+    let done = 0;
+    for (const item of files) {
+      const buf = await item.file.arrayBuffer();
+      const src = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+      item.status='done'; done++;
+      document.getElementById('opCount').textContent = `${done} / ${files.length}`;
+      document.getElementById('opFill').style.width = (done/files.length*100)+'%'; render();
+    }
+    const out = await merged.save();
+    mergedResult = new Blob([out], { type:'application/pdf' });
+    mergedResult._name = '합친_PDF.pdf';
+    document.getElementById('opText').textContent='완료!';
+    setTimeout(()=>op.classList.remove('show'),1200); render();
+    showToast('🔗 '+files.length+'개 PDF를 하나로 합쳤습니다');
+  }
+  // ── PACK
+  async function doPack() {
+    const id = document.getElementById('packId').value.trim() || '학번';
+    const nm = document.getElementById('packName').value.trim() || '이름';
+    const ti = document.getElementById('packTitle').value.trim() || '과제';
+    const zipName = `${id}_${nm}_${ti}.zip`;
+    const op = document.getElementById('overallProgress'); op.classList.add('show');
+    document.getElementById('opText').textContent = '압축팩 생성 중...';
+    const zip = new JSZip();
+    const root = zip.folder(`${id}_${nm}_${ti}`);
+    let done = 0;
+    for (const item of files) {
+      const sub = item.type==='image'||item.type==='heic' ? '이미지' : item.type==='pdf' ? '문서' :
+                  item.type==='docx' ? '문서' : item.type==='zip' ? '압축파일' : '기타';
+      root.folder(sub).file(item.file.name, item.file);
+      item.status='done'; done++;
+      document.getElementById('opCount').textContent = `${done} / ${files.length}`;
+      document.getElementById('opFill').style.width = (done/files.length*100)+'%'; render();
+    }
+    const blob = await zip.generateAsync({ type:'blob' });
+    mergedResult = blob; mergedResult._name = zipName;
+    document.getElementById('opText').textContent='완료!';
+    setTimeout(()=>op.classList.remove('show'),1200); render();
+    showToast('📦 '+zipName+' 생성 완료');
+  }
+  // ── DUP
+  async function doDupDetect() {
+    const op = document.getElementById('overallProgress'); op.classList.add('show');
+    document.getElementById('opText').textContent = '중복 탐지 중...';
+    const hashMap = new Map();
+    let done = 0;
+    for (const item of files) {
+      const buf = await item.file.arrayBuffer();
+      const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+      item._hash = [...new Uint8Array(hashBuf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+      if (!hashMap.has(item._hash)) hashMap.set(item._hash, []);
+      hashMap.get(item._hash).push(item);
+      item.status='done'; done++;
+      document.getElementById('opCount').textContent = `${done} / ${files.length}`;
+      document.getElementById('opFill').style.width = (done/files.length*100)+'%'; render();
+    }
+    const nameMap = new Map();
+    const normName = n => n.replace(/\.[^.]+$/,'').replace(/[\s_\-]?\(?\d+\)?$/,'').replace(/[\s_\-]?(복사본?|copy)$/i,'').trim();
+    for (const item of files) {
+      const key = normName(item.file.name);
+      if (!nameMap.has(key)) nameMap.set(key, []);
+      nameMap.get(key).push(item);
+    }
+    let groupNo = 0; let dupCount = 0;
+    files.forEach(f => { f.dupGroup = null; f.checks = 'unique'; });
+    for (const [h, arr] of hashMap) {
+      if (arr.length > 1) { groupNo++; arr.forEach(f=>{ f.dupGroup = groupNo+' (내용 동일)'; f.checks=null; }); dupCount += arr.length; }
+    }
+    for (const [k, arr] of nameMap) {
+      if (arr.length > 1 && arr.some(f=>!f.dupGroup)) { groupNo++; arr.forEach(f=>{ if(!f.dupGroup){ f.dupGroup = groupNo+' (이름 유사)'; f.checks=null; } }); }
+    }
+    document.getElementById('opText').textContent='완료!';
+    setTimeout(()=>op.classList.remove('show'),1200); render();
+    showToast(dupCount ? `🔍 중복 의심 ${dupCount}개 발견` : '✅ 중복 파일 없음');
+  }
+
+  function downloadMerged() { if (mergedResult) triggerDownload(mergedResult, mergedResult._name || '결과.pdf'); }
+
+  // ════ Helpers ════
+  function compressImage(file, quality, mime, fillWhite) {
+    return new Promise((resolve, reject) => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        if (fillWhite) { ctx.fillStyle='#fff'; ctx.fillRect(0,0,c.width,c.height); }
+        ctx.drawImage(img,0,0); URL.revokeObjectURL(url);
+        c.toBlob(b => b?resolve(b):reject(new Error('fail')), mime, quality);
+      };
+      img.onerror = reject; img.src = url;
+    });
+  }
+  async function compressPdf(file) {
+    const buf = await file.arrayBuffer();
+    const doc = await PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
+    const out = await doc.save({ useObjectStreams: true, addDefaultPage: false });
+    return new Blob([out], { type:'application/pdf' });
+  }
+  async function compressDocx(file, quality) {
+    const zip = await JSZip.loadAsync(file), out = new JSZip();
+    const imgExt = /\.(png|jpg|jpeg|gif|bmp)$/i;
+    for (const [path, entry] of Object.entries(zip.files)) {
+      if (entry.dir) { out.folder(path); continue; }
+      if (path.startsWith('word/media/') && imgExt.test(path)) {
+        const blob = await entry.async('blob');
+        const comp = await compressImage(new File([blob], path.split('/').pop(), { type: blob.type||'image/jpeg' }), quality, 'image/jpeg', true);
+        out.file(path, comp);
+      } else out.file(path, await entry.async('arraybuffer'), { compression:'DEFLATE', compressionOptions:{level:6} });
+    }
+    return out.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:6} });
+  }
+  async function imageToPdf(file) {
+    const doc = await PDFLib.PDFDocument.create();
+    const jpg = await (await compressImage(file, 0.92, 'image/jpeg', true)).arrayBuffer();
+    const img = await doc.embedJpg(jpg);
+    const page = doc.addPage([img.width, img.height]);
+    page.drawImage(img, { x:0, y:0, width:img.width, height:img.height });
+    return new Blob([await doc.save()], { type:'application/pdf' });
+  }
+  async function pdfToImagesZip(file) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const zip = new JSZip();
+    for (let p=1; p<=pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const vp = page.getViewport({ scale: 2 });
+      const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+      zip.file(`page_${String(p).padStart(2,'0')}.png`, blob);
+    }
+    return zip.generateAsync({ type:'blob' });
+  }
+  async function extractPdfText(file) {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let text = '';
+    for (let p=1; p<=pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      text += content.items.map(i=>i.str).join(' ') + '\n\n';
+    }
+    return text.trim();
+  }
+  async function extractDocxText(file) {
+    const zip = await JSZip.loadAsync(file);
+    const docXml = zip.file('word/document.xml');
+    if (!docXml) return '(문서 본문을 찾을 수 없습니다)';
+    const xml = await docXml.async('text');
+    let text = xml.replace(/<\/w:p>/g,'\n').replace(/<[^>]+>/g,'');
+    const ta = document.createElement('textarea'); ta.innerHTML = text;
+    return ta.value.trim();
+  }
+
+  function downloadOne(id) { const it = files.find(f=>f.id===id); if (it?.resultBlob) triggerDownload(it.resultBlob, it.resultName||it.file.name); }
+  async function downloadGroupZip(name) {
+    const g = getGroups().find(g=>g.name===name); if (!g) return;
+    const zip = new JSZip();
+    for (const it of g.items) if (it.resultBlob) zip.file(it.resultName||it.file.name, it.resultBlob);
+    triggerDownload(await zip.generateAsync({type:'blob'}), sanitize(name)+'.zip');
+  }
+  async function downloadAllGroupsZip() {
+    const btn = document.getElementById('btnZipAll'); btn.disabled=true; btn.textContent='📦 ZIP 생성 중...';
+    const zip = new JSZip();
+    for (const g of getGroups()) {
+      const folder = zip.folder(sanitize(g.name));
+      for (const it of g.items) if (it.resultBlob) folder.file(it.resultName||it.file.name, it.resultBlob);
+    }
+    triggerDownload(await zip.generateAsync({type:'blob'}), '정리된_파일.zip');
+    btn.disabled=false; btn.textContent='📦 결과를 그룹별로 묶어 ZIP 다운로드';
+  }
+  async function copyText(id) { const it = files.find(f=>f.id===id); if (it?.extractedText!=null) { await navigator.clipboard.writeText(it.extractedText); showToast('📋 클립보드에 복사되었습니다'); } }
+  function downloadTxt(id) {
+    const it = files.find(f=>f.id===id); if (it?.extractedText==null) return;
+    triggerDownload(new Blob([it.extractedText], {type:'text/plain;charset=utf-8'}), it.file.name.replace(/\.[^.]+$/,'')+'.txt');
+  }
+  function downloadAllTxt() {
+    const parts = files.filter(f=>f.extractedText!=null).map(f=>'===== '+f.file.name+' =====\n'+f.extractedText);
+    if (!parts.length) return;
+    triggerDownload(new Blob([parts.join('\n\n\n')], {type:'text/plain;charset=utf-8'}), '추출한_글자_전체.txt');
+    showToast('📄 전체 텍스트를 .txt로 저장했습니다');
+  }
+  function addSuffix(name, sfx) { const d = name.lastIndexOf('.'); return d===-1?name+sfx:name.slice(0,d)+sfx+name.slice(d); }
+  const sanitize = s => s.replace(/[\/\\:*?"<>|]/g,'_');
+  function triggerDownload(blob, name) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  }
+  function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+
+  function updateSummary() {
+    const summary = document.getElementById('summary');
+    if (!['compress','convert','heic'].includes(currentTab)) { summary.classList.remove('show'); return; }
+    const done = files.filter(f=>f.resultBlob);
+    if (!done.length) { summary.classList.remove('show'); return; }
+    summary.classList.add('show');
+    const orig = done.reduce((s,f)=>s+f.originalSize,0), res = done.reduce((s,f)=>s+f.resultBlob.size,0);
+    document.getElementById('sumOriginal').textContent = fmtSize(orig);
+    document.getElementById('sumCompressed').textContent = fmtSize(res);
+    document.getElementById('sumSaved').textContent = (res<=orig?'−':'+')+fmtSize(Math.abs(orig-res));
+  }
+
+  const dz = document.getElementById('dropzone'), fi = document.getElementById('fileInput');
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', ()=>dz.classList.remove('drag'));
+  dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('drag'); addFiles(e.dataTransfer.files); });
+  fi.addEventListener('change', ()=>{ addFiles(fi.files); fi.value=''; });
+
+  switchTab('compress');
+</script>
+</body>
+</html>

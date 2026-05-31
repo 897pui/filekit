@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+*.log
+.vercel
+test-files/
+make_test_files.py
+.claude/
