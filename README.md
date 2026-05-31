@@ -33,7 +33,7 @@
 별도 빌드 없이 `index.html`을 브라우저로 열면 됩니다.
 
 ```bash
-npx serve .
+https://filekit-seven.vercel.app
 ```
 
 ## 📦 배포
